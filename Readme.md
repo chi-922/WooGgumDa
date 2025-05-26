@@ -153,7 +153,7 @@ woo-ggum-da/
 │       ├── jsconfig.json
 │       └── index.css           # 글로벌 스타일
 │
-├── backend/                    # 현호오빠 취합
+├── backend/
 │   ├── package.json
 │   ├── src/
 │   └── config/
@@ -406,6 +406,24 @@ woo-ggum-da/
   - `redux-toolkit` 기반 전역 상태관리 구조 도입 및 적용
 
 
+<br>
+
+<details>
+<summary><strong>🧯 트러블슈팅</strong></summary>
+
+#### 🔸 RefreshToken으로 토큰 재발급 무한 호출 이슈
+- **문제**: 기존 API 요청이 401 에러 발생 시 토큰 갱신을 위해 요청을 재시도 하면서 401 무한 에러 발생
+- **해결**: 토큰 갱신을 위해 대기 요청 큐를 활용하고 401, 403 분기별로 갱신 및 실패 로직 구상
+
+#### 🔸 과도한 Props 전달
+- **문제**: 프론트 컴포넌트를 잘게 쪼개다 보니 props 전달이 복잡해짐
+- **해결**: 전역 상태 관리(Redux)로 props 사용 최소화 및 유지보수성 향상
+
+#### 🔸45초마다 연결 끊김 이슈 & heatbeat와 ping과 서로 충돌
+- **문제**: SSE 연결 시 타임아웃에 민감하게 반응하여 튕김 발생
+- **해결**: 백엔드와 핑테스트, 하트비트를 서로소로 interval 지정하여 신호를 확인
+
+</details>
 <br>
 
 ### 🍚김서린
