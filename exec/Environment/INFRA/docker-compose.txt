@@ -1,0 +1,564 @@
+version: "3"
+services:
+  # 구성 서비스
+  config-service:
+    image: imjuchan/config-service:latest
+    ports:
+      - "${CONFIG_SERVICE_PORT}:${CONFIG_SERVICE_PORT}"
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SERVER_PORT=${CONFIG_SERVICE_PORT}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - LOG_LEVEL_ROOT=${LOG_LEVEL_ROOT}
+      - LOG_LEVEL_SERVICE=${LOG_LEVEL_SERVICE}
+      - MANAGEMENT_ENDPOINTS_INCLUDE=${MANAGEMENT_ENDPOINTS_INCLUDE}
+      - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED}
+      - PROMETHEUS_ENDPOINT_ENABLED=${PROMETHEUS_ENDPOINT_ENABLED}
+      - HEALTH_DETAILS=${HEALTH_DETAILS}
+      - CONFIG_RETRY_INITIAL_INTERVAL=1500
+      - CONFIG_RETRY_MAX_ATTEMPTS=${CONFIG_RETRY_MAX_ATTEMPTS}
+      - CONFIG_RETRY_MAX_INTERVAL=${CONFIG_RETRY_MAX_INTERVAL}
+      - CONFIG_RETRY_MULTIPLIER=${CONFIG_RETRY_MULTIPLIER}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  # 유레카 서비스
+  eureka-service:
+    image: imjuchan/eureka-service:latest
+    ports:
+      - "${EUREKA_SERVICE_PORT}:${EUREKA_SERVICE_PORT}"
+    depends_on:
+      - config-service
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SERVER_PORT=${EUREKA_SERVICE_PORT}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - LOG_LEVEL_ROOT=${LOG_LEVEL_ROOT}
+      - LOG_LEVEL_EUREKA=${LOG_LEVEL_EUREKA}
+      - LOG_LEVEL_EUREKA_SPRING=${LOG_LEVEL_EUREKA_SPRING}
+      - MANAGEMENT_ENDPOINTS_INCLUDE=${MANAGEMENT_ENDPOINTS_INCLUDE}
+      - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED}
+      - PROMETHEUS_ENDPOINT_ENABLED=${PROMETHEUS_ENDPOINT_ENABLED}
+      - HEALTH_DETAILS=${HEALTH_DETAILS}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  # Redis 서비스
+  redis:
+    image: redis:latest
+    ports:
+      - "${SPRING_DATA_REDIS_PORT}:6379"
+    networks:
+      - backend-network
+    volumes:
+      - redis-data:/data
+
+  elasticsearch:
+    image: elasticsearch:8.12.2
+    ports:
+      - 9200:9200
+    networks:
+      - backend-network
+    volumes:
+      - elasticsearch-data:/data
+    environment:
+      - TZ=Asia/Seoul
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    command: >
+      bash -c "
+        bin/elasticsearch-plugin install analysis-nori --batch || true &&
+        /usr/local/bin/docker-entrypoint.sh elasticsearch
+      "
+
+  # RabbitMQ 서비스 추가
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "15672:15672" # 관리 UI용 포트
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USERNAME}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # 게이트웨이 서비스
+  gateway-service:
+    image: imjuchan/gateway-service:latest
+    ports:
+      - "${GATEWAY_EXTERNAL_PORT}:${GATEWAY_SERVICE_PORT}"
+    depends_on:
+      - eureka-service
+      - redis
+      - rabbitmq
+    networks:
+      - backend-network
+      - frontend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SERVER_PORT=${GATEWAY_SERVICE_PORT}
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - SPRING_DATA_REDIS_HOST=${SPRING_DATA_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_DATA_REDIS_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_TOKEN_VALIDITY=${JWT_ACCESS_TOKEN_VALIDITY}
+      - JWT_REFRESH_TOKEN_VALIDITY=${JWT_REFRESH_TOKEN_VALIDITY}
+      - JWT_TOKEN_PREFIX=${JWT_TOKEN_PREFIX}
+      - JWT_HEADER_STRING=${JWT_HEADER_STRING}
+      - LOG_LEVEL_ROOT=${LOG_LEVEL_ROOT}
+      - LOG_LEVEL_SERVICE=${LOG_LEVEL_SERVICE}
+      - LOG_LEVEL_SECURITY=${LOG_LEVEL_SECURITY}
+      - LOG_LEVEL_REDIS=${LOG_LEVEL_REDIS}
+      - LOG_LEVEL_EUREKA=${LOG_LEVEL_EUREKA}
+      - LOG_LEVEL_EUREKA_SPRING=${LOG_LEVEL_EUREKA_SPRING}
+      - LOG_CHARSET_CONSOLE=${LOG_CHARSET_CONSOLE}
+      - LOG_CHARSET_FILE=${LOG_CHARSET_FILE}
+      - LOG_FILE_PATH=${LOG_FILE_PATH}
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+      # 라우팅 관련 추가 환경 변수
+      # routes[0] - 로그아웃 라우팅 (JWT 인증 필요)
+      - spring.cloud.gateway.routes[0].id=user-service-logout
+      - spring.cloud.gateway.routes[0].uri=lb://USER-SERVICE
+      - spring.cloud.gateway.routes[0].predicates[0]=Path=/api/auth/logout
+      - spring.cloud.gateway.routes[0].filters[0].name=JwtAuthFilter
+
+      # user-service 라우팅 (로그인 같은 공개 API는 필터를 추가하지 않음)
+      - spring.cloud.gateway.routes[1].id=user-service
+      - spring.cloud.gateway.routes[1].uri=lb://USER-SERVICE
+      - spring.cloud.gateway.routes[1].predicates[0]=Path=/api/auth/**,/api/auth
+
+      #
+      - spring.cloud.gateway.routes[2].id=user-service-information
+      - spring.cloud.gateway.routes[2].uri=lb://USER-SERVICE
+      - spring.cloud.gateway.routes[2].predicates[0]=Path=/api/users/**,/api/users
+      - spring.cloud.gateway.routes[2].filters[0].name=JwtAuthFilter
+
+      # lucky-service 라우팅 추가 + JwtAuthFilter
+      - spring.cloud.gateway.routes[3].id=lucky-service
+      - spring.cloud.gateway.routes[3].uri=lb://LUCKY-SERVICE
+      - spring.cloud.gateway.routes[3].predicates[0]=Path=/api/lucky-numbers,/api/lucky-numbers/**,/api/daily-fortune,/api/daily-fortune/**,/api/dream-meaning,/api/dream-meaning/**
+      - spring.cloud.gateway.routes[3].filters[0].name=JwtAuthFilter
+
+      # diary-service 라우팅 추가 + JwtAuthFilter
+      - spring.cloud.gateway.routes[4].id=diary-service
+      - spring.cloud.gateway.routes[4].uri=lb://DIARY-SERVICE
+      - spring.cloud.gateway.routes[4].predicates[0]=Path=/api/diaries/**,/api/tags/**,/api/diaries,api/tags
+      - spring.cloud.gateway.routes[4].filters[0].name=JwtAuthFilter
+
+      # guestbook-service 라우팅 추가 + JwtAuthFilter
+      - spring.cloud.gateway.routes[5].id=guestbook-service
+      - spring.cloud.gateway.routes[5].uri=lb://GUESTBOOK-SERVICE
+      - spring.cloud.gateway.routes[5].predicates[0]=Path=/api/guestbook/**,/api/guestbook
+      - spring.cloud.gateway.routes[5].filters[0].name=JwtAuthFilter
+
+      # subscribe-service 라우팅 추가 + JwtAuthFilter
+      - spring.cloud.gateway.routes[6].id=subscribe-service
+      - spring.cloud.gateway.routes[6].uri=lb://SUBSCRIBE-SERVICE
+      - spring.cloud.gateway.routes[6].predicates[0]=Path=/api/subscription/**,/api/subscription
+      - spring.cloud.gateway.routes[6].filters[0].name=JwtAuthFilter
+
+      # fastapi-service 라우팅 추가
+      - spring.cloud.gateway.routes[7].id=fastapi-service
+      - spring.cloud.gateway.routes[7].uri=http://fastapi-service:8000
+      - spring.cloud.gateway.routes[7].predicates[0]=Path=/api/ai/**
+      - spring.cloud.gateway.routes[7].filters[0].name=JwtAuthFilter
+
+      # alarm-service 라우팅 추가 + JwtAuthFilter
+      - spring.cloud.gateway.routes[8].id=notification-service
+      - spring.cloud.gateway.routes[8].uri=lb://NOTIFICATION-SERVICE
+      - spring.cloud.gateway.routes[8].predicates[0]=Path=/api/notifications,/api/notifications/**
+      - spring.cloud.gateway.routes[8].filters[0].name=JwtAuthFilter
+     
+      # gateway 알림 서비스를 위한 설정
+      - spring.cloud.gateway.httpclient.response-timeout=600000
+      - spring.cloud.gateway.httpclient.connect-timeout=600000
+
+  # 유저 서비스
+  user-service:
+    image: imjuchan/user-service:latest
+    depends_on:
+      - eureka-service
+      - user-db
+      - redis
+      - rabbitmq
+      - elasticsearch
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - USER_DB_URL=${USER_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - SPRING_DATA_REDIS_HOST=${SPRING_DATA_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_DATA_REDIS_PORT}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ACCESS_TOKEN_VALIDITY=${JWT_ACCESS_TOKEN_VALIDITY}
+      - JWT_REFRESH_TOKEN_VALIDITY=${JWT_REFRESH_TOKEN_VALIDITY}
+      - JWT_TOKEN_PREFIX=${JWT_TOKEN_PREFIX}
+      - JWT_HEADER_STRING=${JWT_HEADER_STRING}
+      - LOG_LEVEL_ROOT=${LOG_LEVEL_ROOT}
+      - LOG_LEVEL_SERVICE=${LOG_LEVEL_SERVICE}
+      - LOG_LEVEL_SECURITY=${LOG_LEVEL_SECURITY}
+      - LOG_LEVEL_REDIS=${LOG_LEVEL_REDIS}
+      - SERVER_PORT=${SERVER_PORT}
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+      # user-service의 환경 변수 섹션에 추가
+      - ELASTIC_SEARCH_URL=${ELASTIC_SEARCH_URL}
+      # user-service 설정에 다음 라인 추가
+      - SPRING_ELASTICSEARCH_URIS=${SPRING_ELASTICSEARCH_URIS}
+  # 유저 데이터베이스
+  user-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=user_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - user-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+  # 다이어리 서비스
+  diary-service:
+    image: imjuchan/diary-service:latest
+    depends_on:
+      - eureka-service
+      - diary-db
+      - rabbitmq
+      - elasticsearch
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - DIARY_DB_URL=${DIARY_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - LOG_LEVEL_ROOT=${LOG_LEVEL_ROOT}
+      - LOG_LEVEL_SERVICE=${LOG_LEVEL_SERVICE}
+      - LOG_LEVEL_SECURITY=${LOG_LEVEL_SECURITY}
+      - LOG_LEVEL_REDIS=${LOG_LEVEL_REDIS}
+      - SERVER_PORT=${SERVER_PORT}
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+      # S3 값
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_BUCKET=${AWS_BUCKET}
+      - AWS_STACK_AUTO=${AWS_STACK_AUTO}
+      # Elasticsearch 설정
+      - ELASTIC_SEARCH_URL=${ELASTIC_SEARCH_URL}
+      # DB error fix
+      - SPRING_JPA_HIBERNATE_NAMING_PHYSICAL_STRATEGY=org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl 
+  # 다이어리 데이터베이스
+  diary-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3307:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=diary_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - diary-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+  # 방명록 서비스
+  guestbook-service:
+    image: imjuchan/guestbook-service:latest
+    depends_on:
+      - eureka-service
+      - guestbook-db
+      - rabbitmq
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - GUESTBOOK_DB_URL=${GUESTBOOK_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - SERVER_PORT=${SERVER_PORT}
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  # 방명록 데이터베이스
+  guestbook-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3308:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=guestbook_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - guestbook-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+  # 행운 서비스
+  lucky-service:
+    image: imjuchan/lucky-service:latest
+    depends_on:
+      - eureka-service
+      - lucky-db
+      - rabbitmq
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - OPENAI_API_KEY=${LUCKY_OPENAI_API_KEY}
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - LUCKY_DB_URL=${LUCKY_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - SERVER_PORT=${SERVER_PORT}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQL8Dialect
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  # 행운 데이터베이스
+  lucky-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3309:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=lucky_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - lucky-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+  # 구독 서비스
+  subscribe-service:
+    image: imjuchan/subscribe-service:latest
+    depends_on:
+      - eureka-service
+      - subscribe-db
+      - rabbitmq
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - SUBSCRIBE_DB_URL=${SUBSCRIBE_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - SERVER_PORT=${SERVER_PORT}
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  # 구독 데이터베이스
+  subscribe-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3310:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=subscribe_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - subscribe-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+    # 행운 서비스
+  notification-service:
+    image: imjuchan/notification-service:latest
+    depends_on:
+      - eureka-service
+      - notification-db
+      - rabbitmq
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - SPRING_CONFIG_IMPORT=configserver:${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_URI=${SPRING_CLOUD_CONFIG_URI}
+      - SPRING_CLOUD_CONFIG_FAIL_FAST=${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+      - NOTIFICATION_DB_URL=${NOTIFICATION_DB_URL}
+      - DB_PARAMS=${DB_PARAMS}
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=${JPA_HIBERNATE_DDL_AUTO}
+      - SERVER_PORT=${SERVER_PORT}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQL8Dialect
+      # RabbitMQ 환경 변수 추가
+      - SPRING_RABBITMQ_HOST=${RABBITMQ_HOST}
+      - SPRING_RABBITMQ_PORT=${RABBITMQ_PORT}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # 문제 해결을 위한 추가 환경 변수
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED=true
+
+  notification-db:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "3312:3306"
+    environment:
+      - TZ=Asia/Seoul
+      - MYSQL_DATABASE=notification_db
+      - MYSQL_ROOT_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - notification-db-data:/var/lib/mysql
+    networks:
+      - backend-network
+
+  # 프론트엔드
+  frontend:
+    image: imjuchan/frontend-service:latest
+    ports:
+      - "${FRONTEND_PORT}:80"
+      - "443:443"
+    depends_on:
+      - gateway-service
+    networks:
+      - frontend-network
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf
+
+  fastapi-service:
+    image: imjuchan/fastapi-service:latest
+    ports:
+      - "8000:8000"
+    networks:
+      - backend-network
+    environment:
+      - TZ=Asia/Seoul
+      - STABILITY_API_KEY=${STABILITY_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RUNWAYML_API_SECRET=${RUNWAYML_API_SECRET}
+      - API_BASE_URL=${API_BASE_URL}
+networks:
+  backend-network:
+    driver: bridge
+  frontend-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  rabbitmq-data:
+  user-db-data:
+  diary-db-data:
+  guestbook-db-data:
+  lucky-db-data:
+  subscribe-db-data:
+  notification-db-data:
+  elasticsearch-data:

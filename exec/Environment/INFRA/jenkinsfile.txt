@@ -1,0 +1,386 @@
+// Scripted Pipeline 사용
+node {
+    // 환경 변수 설정
+    def DOCKER_HUB_USERNAME = "도커아이디"
+    def CONFIG_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/config-service"
+    def EUREKA_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/eureka-service"
+    def GATEWAY_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/gateway-service"
+    def USER_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/user-service"
+    def DIARY_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/diary-service"
+    def GUESTBOOK_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/guestbook-service"
+    def LUCKY_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/lucky-service"
+    def SUBSCRIBE_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/subscribe-service"
+    def COMMON_MODULE_IMAGE = "${DOCKER_HUB_USERNAME}/common-module"
+    def FRONTEND_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/frontend-service"
+    def FASTAPI_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/fastapi-service"
+    def NOTIFICATION_SERVICE_IMAGE = "${DOCKER_HUB_USERNAME}/notification-service"
+    def DEPLOY_SERVER = "j12c202.p.ssafy.io"
+    def DEPLOY_USER = "ubuntu"
+    def DEPLOY_PATH = "/home/ubuntu/"
+    
+    // Maven 도구 설정 - 시스템에 설치된 Maven의 전체 경로 지정
+    def mvn = "/usr/bin/mvn"
+    
+    // 빌드 시작 시 Mattermost에 알림
+    wrap([$class: 'BuildUser']) {
+    def user = env.BUILD_USER ?: "System"
+    def cause = currentBuild.getBuildCauses()
+    def changeInfo = ""
+    
+    try {
+        // SCM 변경 정보 확인
+        if (currentBuild.changeSets.size() > 0) {
+            def changeAuthor = currentBuild.changeSets[0].items[0].author.fullName
+            def changeMsg = currentBuild.changeSets[0].items[0].msg
+            changeInfo = "\n변경 작성자: ${changeAuthor}\n커밋 메시지: ${changeMsg}"
+        } else if (cause.toString().contains("UserIdCause")) {
+            // 수동 트리거
+            changeInfo = "\n트리거: 수동 실행 (${user})"
+        } else {
+            // 다른 트리거 (스케줄링 등)
+            changeInfo = "\n트리거: ${cause.toString()}"
+        }
+    } catch (Exception e) {
+        changeInfo = "\n트리거 정보를 가져올 수 없습니다."
+    }
+    
+    mattermostSend color: 'good', 
+                message: "빌드 시작: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})${changeInfo}"
+    }
+    
+    try {
+        stage('Checkout') {
+            checkout([$class: 'GitSCM', 
+                branches: [[name: '*/dev']], 
+                extensions: [], 
+                userRemoteConfigs: [[
+                    credentialsId: '내 깃랩 아이디', 
+                    url: 'https://lab.ssafy.com/s12-ai-image-sub1/S12P21C202.git'
+                ]]
+            ])
+        }
+        
+        stage('Verify Project Structure') {
+            sh 'ls -la'  // 루트 디렉토리 확인
+            
+            // 백엔드 디렉토리 확인
+            sh '[ -d "BE" ] && echo "BE directory exists" || echo "BE directory NOT FOUND"'
+            
+            // common-module 디렉토리 확인
+            sh '[ -d "BE/common-module" ] && echo "Common Module directory exists" || echo "Common Module NOT FOUND"'
+            
+            // 각 서비스 디렉토리 확인
+            sh '[ -d "BE/config-service" ] && echo "Config Service directory exists" || echo "Config Service NOT FOUND"'
+            sh '[ -d "BE/eureka-service" ] && echo "Eureka Service directory exists" || echo "Eureka Service NOT FOUND"'
+            sh '[ -d "BE/gateway-service" ] && echo "Gateway Service directory exists" || echo "Gateway Service NOT FOUND"'
+            sh '[ -d "BE/user-service" ] && echo "User Service directory exists" || echo "User Service NOT FOUND"'
+            sh '[ -d "BE/diary-service" ] && echo "Diary Service directory exists" || echo "Diary Service NOT FOUND"'
+            sh '[ -d "BE/guestbook-service" ] && echo "Guestbook Service directory exists" || echo "Guestbook Service NOT FOUND"'
+            sh '[ -d "BE/lucky-service" ] && echo "Lucky Service directory exists" || echo "Lucky Service NOT FOUND"'
+            sh '[ -d "BE/subscribe-service" ] && echo "Subscribe Service directory exists" || echo "Subscribe Service NOT FOUND"'
+            sh '[ -d "BE/notification-service" ] && echo "Notification Service directory exists" || echo "Notification Service NOT FOUND"'
+            
+            // 프론트엔드 디렉토리 확인
+            sh '[ -d "FE" ] && echo "FE directory exists" || echo "FE directory NOT FOUND"'
+            
+            // FastAPI 디렉토리 확인 (추가)
+            sh '[ -d "AI" ] && echo "AI directory exists" || echo "AI directory NOT FOUND"'
+        }
+        
+        stage('Common Module Build') {
+            if (fileExists('BE/common-module')) {
+                dir('BE/common-module') {
+                    sh "${mvn} clean install -DskipTests"
+                }
+            } else {
+                error "common-module 디렉토리가 존재하지 않습니다. 프로젝트 구조를 확인하세요."
+            }
+        }
+        
+        stage('Backend Build') {
+            if (fileExists('BE/config-service') && fileExists('BE/eureka-service') && fileExists('BE/gateway-service')) {
+                parallel(
+                    "Config Service": {
+                        dir('BE/config-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Eureka Service": {
+                        dir('BE/eureka-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Gateway Service": {
+                        dir('BE/gateway-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "User Service": {
+                        dir('BE/user-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Diary Service": {
+                        dir('BE/diary-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Guestbook Service": {
+                        dir('BE/guestbook-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Lucky Service": {
+                        dir('BE/lucky-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Subscribe Service": {
+                        dir('BE/subscribe-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    },
+                    "Notification Service": {
+                        dir('BE/notification-service') {
+                            sh "${mvn} clean package -DskipTests"
+                        }
+                    }
+                )
+            } else {
+                error "하나 이상의 백엔드 서비스 디렉토리가 존재하지 않습니다. 프로젝트 구조를 확인하세요."
+            }
+        }
+        
+        stage('Frontend Build') {
+            if (fileExists('FE')) {
+                dir('FE') {
+                    sh '''
+                        if [ -f "package.json" ]; then
+                            sed -i 's/"build": "tsc -b && vite build"/"build": "vite build --emptyOutDir"/g' package.json
+                            cat package.json | grep build
+                        fi
+                    '''
+                    echo "프론트엔드 빌드를 Docker 빌드 단계에서 처리합니다."
+                }
+            } else {
+                error "프론트엔드 디렉토리가 존재하지 않습니다. 프로젝트 구조를 확인하세요."
+            }
+        }
+       
+        stage('FastAPI Build') {
+            if (fileExists('AI')) {
+                dir('AI') {
+                    sh '''
+                        if [ -f "requirements.txt" ]; then
+                            echo "requirements.txt 파일이 존재합니다."
+                        else
+                            echo "requirements.txt 파일이 없습니다."
+                        fi
+                        
+                        # Dockerfile 확인
+                        if [ -f "Dockerfile" ]; then
+                            echo "Dockerfile이 존재합니다."
+                        else
+                            echo "Dockerfile이 없습니다."
+                        fi
+                    '''
+                    
+                    echo "FastAPI 서비스 빌드를 Docker 빌드 단계에서 처리합니다."
+                }
+            } else {
+                error "AI 디렉토리가 존재하지 않습니다. 프로젝트 구조를 확인하세요."
+            }
+        }
+        
+        stage('Docker Build') {
+            parallel(
+                "Common Module Docker": {
+                    dir('BE/common-module') {
+                        sh "docker build -t ${COMMON_MODULE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${COMMON_MODULE_IMAGE}:${BUILD_NUMBER} ${COMMON_MODULE_IMAGE}:latest"
+                    }
+                },
+                "Config Service Docker": {
+                    dir('BE/config-service') {
+                        sh "docker build -t ${CONFIG_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${CONFIG_SERVICE_IMAGE}:${BUILD_NUMBER} ${CONFIG_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Eureka Service Docker": {
+                    dir('BE/eureka-service') {
+                        sh "docker build -t ${EUREKA_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${EUREKA_SERVICE_IMAGE}:${BUILD_NUMBER} ${EUREKA_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Gateway Service Docker": {
+                    dir('BE/gateway-service') {
+                        sh "docker build -t ${GATEWAY_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${GATEWAY_SERVICE_IMAGE}:${BUILD_NUMBER} ${GATEWAY_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "User Service Docker": {
+                    dir('BE/user-service') {
+                        sh "docker build -t ${USER_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${USER_SERVICE_IMAGE}:${BUILD_NUMBER} ${USER_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Diary Service Docker": {
+                    dir('BE/diary-service') {
+                        sh "docker build -t ${DIARY_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${DIARY_SERVICE_IMAGE}:${BUILD_NUMBER} ${DIARY_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Guestbook Service Docker": {
+                    dir('BE/guestbook-service') {
+                        sh "docker build -t ${GUESTBOOK_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${GUESTBOOK_SERVICE_IMAGE}:${BUILD_NUMBER} ${GUESTBOOK_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Lucky Service Docker": {
+                    dir('BE/lucky-service') {
+                        sh "docker build -t ${LUCKY_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${LUCKY_SERVICE_IMAGE}:${BUILD_NUMBER} ${LUCKY_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Subscribe Service Docker": {
+                    dir('BE/subscribe-service') {
+                        sh "docker build -t ${SUBSCRIBE_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${SUBSCRIBE_SERVICE_IMAGE}:${BUILD_NUMBER} ${SUBSCRIBE_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Notification Service Docker": {
+                    dir('BE/notification-service') {
+                        sh "docker build -t ${NOTIFICATION_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${NOTIFICATION_SERVICE_IMAGE}:${BUILD_NUMBER} ${NOTIFICATION_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "Frontend Docker": {
+                    dir('FE') {
+                        // Dockerfile 수정 (TypeScript 검사 생략)
+                        sh '''
+                            if [ -f "Dockerfile" ]; then
+                                sed -i 's/RUN npm run build/RUN npm run build --force/g' Dockerfile
+                                cat Dockerfile | grep "npm run build"
+                            fi
+                        '''
+                        sh "docker build -t ${FRONTEND_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${FRONTEND_SERVICE_IMAGE}:${BUILD_NUMBER} ${FRONTEND_SERVICE_IMAGE}:latest"
+                    }
+                },
+                "FastAPI Docker": { // 추가: FastAPI 서비스 Docker 빌드
+                    dir('AI') {
+                        sh "docker build -t ${FASTAPI_SERVICE_IMAGE}:${BUILD_NUMBER} ."
+                        sh "docker tag ${FASTAPI_SERVICE_IMAGE}:${BUILD_NUMBER} ${FASTAPI_SERVICE_IMAGE}:latest"
+                    }
+                }
+            )
+        }
+        
+        stage('Docker Push') {
+            withCredentials([usernamePassword(credentialsId: 'imjuchan', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                
+                // 공통 모듈 이미지 푸시
+                sh "docker push ${COMMON_MODULE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${COMMON_MODULE_IMAGE}:latest"
+                
+                // 백엔드 서비스 이미지 푸시
+                sh "docker push ${CONFIG_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${CONFIG_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${EUREKA_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${EUREKA_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${GATEWAY_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${GATEWAY_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${USER_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${USER_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${DIARY_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${DIARY_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${GUESTBOOK_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${GUESTBOOK_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${LUCKY_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${LUCKY_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${SUBSCRIBE_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${SUBSCRIBE_SERVICE_IMAGE}:latest"
+
+                sh "docker push ${NOTIFICATION_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${NOTIFICATION_SERVICE_IMAGE}:latest"
+                
+                sh "docker push ${FRONTEND_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${FRONTEND_SERVICE_IMAGE}:latest"
+
+                sh "docker push ${FASTAPI_SERVICE_IMAGE}:${BUILD_NUMBER}"
+                sh "docker push ${FASTAPI_SERVICE_IMAGE}:latest"
+            }
+        }
+        
+        stage('Deploy') {
+            echo "EC2 서버에 서비스를 순차적으로 배포합니다."
+            
+            // 원격 서버에서 실행할 명령 준비 (순차적 배포)
+            sh """
+                ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "cd ${DEPLOY_PATH} && \
+                docker-compose down --remove-orphans && \
+                docker-compose --env-file ./.env pull && \
+                
+                # 핵심 서비스 순차적 시작
+                echo '=== 1. Config Service 시작 ===' && \
+                docker-compose --env-file ./.env up -d config-service && \
+                
+                echo '=== 2. Eureka Service 시작 ===' && \
+                docker-compose --env-file ./.env up -d eureka-service && \
+                
+                echo '=== 3. Gateway Service 시작 ===' && \
+                docker-compose --env-file ./.env up -d gateway-service && \
+                
+                # 나머지 서비스 시작
+                echo '=== 4. 나머지 서비스 시작 ===' && \
+                docker-compose --env-file ./.env up -d && \
+                
+                # 모니터링 시스템 시작
+                echo '=== 5. 모니터링 시스템 시작 ===' && \
+                docker-compose -f /home/ubuntu/docker-compose-monitoring.yml up -d"
+            """
+            
+        }
+        
+    } catch (Exception e) {
+        // 오류 처리
+        echo "파이프라인 실행 중 오류 발생: ${e.message}"
+        currentBuild.result = 'FAILURE'
+        
+        // 실패 알림
+        mattermostSend color: 'danger', 
+                      message: "빌드/배포 실패: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})\n오류: ${e.message}"
+        
+        throw e
+    } finally {
+        // 항상 실행되는 정리 작업
+        sh "docker logout || true"
+        
+        // 서비스 개별 재시작
+        sh """
+            ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "cd ${DEPLOY_PATH} && \
+            sleep 45 && \
+            docker compose restart gateway-service && \
+            docker compose restart user-service && \
+            docker compose restart diary-service && \
+            docker compose restart guestbook-service && \
+            docker compose restart subscribe-service && \
+            docker compose restart lucky-service && \
+            docker compose restart fastapi-service && \
+            docker compose restart notification-service && \
+            docker-compose -f /home/ubuntu/docker-compose-monitoring.yml restart"
+        """
+         // 배포 성공 시 Mattermost에 알림
+            mattermostSend color: 'good', 
+                        message: "배포 성공: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})\n모든 서비스가 순차적으로 배포되었습니다."
+        echo "파이프라인 종료"
+    }
+}

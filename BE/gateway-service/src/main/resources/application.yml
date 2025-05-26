@@ -1,0 +1,13 @@
+server:
+  port: ${GATEWAY_SERVICE_PORT}
+
+spring:
+  application:
+    name: gateway-service
+
+  config:
+    import: configserver:${SPRING_CLOUD_CONFIG_URI}
+
+  cloud:
+    config:
+      fail-fast: ${SPRING_CLOUD_CONFIG_FAIL_FAST}   # Config 서버 연결 실패시 애플리케이션  시작 중단

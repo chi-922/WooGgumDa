@@ -1,0 +1,29 @@
+# ✅ Maven 빌드 결과물
+/target/
+target/
+*.jar
+*.war
+
+# ✅ Java 컴파일 결과물
+*.class
+
+# ✅ IntelliJ 설정 파일
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ✅ 로그/테스트 출력
+*.log
+*.lst
+/test-output/
+/coverage/
+
+# ✅ OS/에디터 임시파일
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# ✅ IDE run/debug config (optional)
+out/

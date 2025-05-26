@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: diary-service
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DIARY_DB_URL}${DB_PARAMS}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_HIBERNATE_DDL_AUTO}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+  cloud:
+    aws:
+      credentials:
+        access-key: ${AWS_ACCESS_KEY}
+        secret-key: ${AWS_SECRET_KEY}
+      region:
+        static: ${AWS_REGION}
+      stack:
+        auto: ${AWS_STACK_AUTO}
+      s3:
+        bucket: ${AWS_BUCKET}
+
+  logging:
+    level:
+      root: ${LOG_LEVEL_ROOT}
+      com.c202.userservice: ${LOG_LEVEL_SERVICE}
+      org.springframework.security: ${LOG_LEVEL_SECURITY}
+      org.springframework.data.redis: ${LOG_LEVEL_REDIS}
+
+server:
+  port: 0
+
+eureka:
+  instance:
+    instance-id: ${spring.cloud.client.ip-address}:${random.value}

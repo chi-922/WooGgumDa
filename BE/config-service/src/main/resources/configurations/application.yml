@@ -1,0 +1,43 @@
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+
+spring:
+  cloud:
+    config:
+      uri: ${SPRING_CLOUD_CONFIG_URI}
+      override-system-properties: false
+      fail-fast: ${SPRING_CLOUD_CONFIG_FAIL_FAST}
+      retry:
+        initial-interval: ${CONFIG_RETRY_INITIAL_INTERVAL:1500}
+        max-attempts: ${CONFIG_RETRY_MAX_ATTEMPTS:10}
+        max-interval: ${CONFIG_RETRY_MAX_INTERVAL:10000}
+        multiplier: ${CONFIG_RETRY_MULTIPLIER:1.5}
+
+  elasticsearch:
+    uris: ${ELASTIC_SEARCH_URL}
+
+  jackson:
+    time-zone: Asia/Seoul
+  logging:
+    pattern:
+      dateformat: yyyy-MM-dd HH:mm:ss.SSS
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_INCLUDE}
+  metrics:
+    export:
+      prometheus:
+        enabled: ${PROMETHEUS_ENABLED}
+  endpoint:
+    prometheus:
+      enabled: ${PROMETHEUS_ENDPOINT_ENABLED:true}
+    health:
+      show-details: ${HEALTH_DETAILS}
+
