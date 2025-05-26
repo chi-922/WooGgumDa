@@ -1,0 +1,51 @@
+-- drop database if exists user_db;
+-- drop database if exists diary_db;
+-- drop database if exists guestbook_db;
+-- drop database if exists subscribe_db;
+-- drop database if exists lucky_db;
+-- drop database if exists notification_db;
+
+
+create database if not exists user_db;
+create database if not exists diary_db;
+create database if not exists guestbook_db;
+create database if not exists subscribe_db;
+create database if not exists lucky_db;
+create database if not exists notification_db;
+
+# user_db 테이블 조회
+use user_db;
+
+select * from refresh_tokens;
+select * from users;
+
+# diary_db 테이블 조회
+use diary_db;
+
+select * from diary;
+select * from diarylike;
+select * from diarytag;
+select * from tag;
+select * from emotion;
+
+# guestbook_db 테이블 조회
+use guestbook_db;
+
+select * from guestbook;
+
+# subscribe_db 테이블 조회
+use subscribe_db;
+
+select * from subscribe;
+
+# lucky_db 테이블 조회
+use lucky_db;
+
+select * from dailyfortune;
+select * from dreammeaning;
+select * from luckynumber;
+
+# alarm_db 테이블 조회
+use notification_db;
+
+select * from alarm;

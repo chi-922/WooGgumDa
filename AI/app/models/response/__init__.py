@@ -1,0 +1,1 @@
+from.video_generate_response_dto import VideoGenerateResponseDto

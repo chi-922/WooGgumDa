@@ -1,0 +1,129 @@
+server:
+  port: ${GATEWAY_SERVICE_PORT}
+
+
+spring:
+  application:
+    name: gateway-service
+
+  # user-service와 같은 redis 설정을 통해 블랙리스트 공유
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+
+  # 게이트웨이 설정
+  cloud:
+    gateway:
+      default-filters:
+        - GlobalFilter
+
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: auth-logout-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/logout
+          filters:
+            - name: JwtAuthFilter
+
+        - id: auth-refresh-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/refresh
+          filters:
+            - name: JwtAuthFilter
+
+        - id: auth-service-other
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/**
+
+        - id: diary-service
+          uri: lb://diary-service
+          predicates:
+            - Path=/api/diaries/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: lucky-service
+          uri: lb://lucky-service
+          predicates:
+            - Path=/api/lucky-numbers/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: daily-fortune-service
+          uri: lb://lucky-service
+          predicates:
+            - Path=/api/daily-fortune/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: dream-meaning-service
+          uri: lb://lucky-service
+          predicates:
+            - Path=/api/dream-meaning/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: guestbook-service
+          uri: lb://guestbook-service
+          predicates:
+            - Path=/api/guestbook/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: subscribe-service
+          uri: lb://subscribe-service
+          predicates:
+            - Path=/api/subscription/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: tag-service
+          uri: lb://diary-service
+          predicates:
+            - Path=/api/tags/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: emotion-service
+          uri: lb://diary-service
+          predicates:
+            - Path=/api/emotions/**
+          filters:
+            - name: JwtAuthFilter
+
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - name: JwtAuthFilter
+logging:
+  charset:
+    console: ${LOG_CHARSET_CONSOLE}
+    file: ${LOG_CHARSET_FILE}
+
+  file:
+    name: ${LOG_FILE_PATH}/${spring.application.name}.log
+
+  level:
+    com.netflix.eureka: ${LOG_LEVEL_EUREKA}
+    org.springframework.cloud.netflix.eureka: ${LOG_LEVEL_EUREKA_SPRING}
+
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-validity-in-ms: ${JWT_ACCESS_TOKEN_VALIDITY}
+  refresh-token-validity-in-ms: ${JWT_REFRESH_TOKEN_VALIDITY}
+  token-prefix: ${JWT_TOKEN_PREFIX}
+  header-string: ${JWT_HEADER_STRING}
+

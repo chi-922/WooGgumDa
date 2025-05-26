@@ -1,0 +1,9 @@
+server:
+  port: ${EUREKA_SERVICE_PORT}   # 유레카 서버 default port
+
+eureka:
+  # 유레카 서버 자신이기 때문에 클라이언트 관련 설정은 false로 setting. (Default가 true이기 때문에 false로 변경해야 함)
+  client:
+    register-with-eureka: false # eureka server를 registry에 등록할지 여부
+    fetch-registry: false       # registry에 있는 정보들을 가져올지 여부
+

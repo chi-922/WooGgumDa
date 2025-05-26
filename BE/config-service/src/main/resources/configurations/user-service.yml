@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: user-service
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${USER_DB_URL}${DB_PARAMS}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_HIBERNATE_DDL_AUTO}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+
+  logging:
+    level:
+      root: ${LOG_LEVEL_ROOT}
+      com.c202.userservice: ${LOG_LEVEL_SERVICE}
+      org.springframework.security: ${LOG_LEVEL_SECURITY}
+      org.springframework.data.redis: ${LOG_LEVEL_REDIS}
+
+jwt:
+  secret-key: ${JWT_SECRET_KEY}
+  access-token-validity-in-ms: ${JWT_ACCESS_TOKEN_VALIDITY}
+  refresh-token-validity-in-ms: ${JWT_REFRESH_TOKEN_VALIDITY}
+  token-prefix: ${JWT_TOKEN_PREFIX}
+  header-string: ${JWT_HEADER_STRING}
+
+server:
+  port: 0
+
+eureka:
+  instance:
+    instance-id: ${spring.cloud.client.ip-address}:${random.value}
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
